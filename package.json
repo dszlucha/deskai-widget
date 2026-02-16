@@ -1,0 +1,22 @@
+{
+  "name": "deskai-widget",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:icons:mac": "bash scripts/gen-mac-icon.sh",
+    "dist": "npm run build:icons:mac && electron-builder"
+  },
+  "build": {
+    "appId": "com.example.my-electron-app",
+    "mac": {
+      "icon": "build/icons/icon.icns",
+      "target": "dir",
+      "category": "public.app-category.productivity"
+    }
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^26.7.0"
+  }
+}
