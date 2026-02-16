@@ -16,7 +16,8 @@ if (process.platform === "darwin") {
   app.setAboutPanelOptions({
     applicationName: app.getName(),
     applicationVersion: app.getVersion(),
-    copyright: "© " + new Date().getFullYear(),
+    copyright:
+      `© ${new Date().getFullYear()} dszlucha. MIT License.`,
     version: [
       `Electron: ${process.versions.electron}`,
       `Node: ${process.versions.node}`,
