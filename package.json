@@ -5,7 +5,8 @@
   "scripts": {
     "start": "electron .",
     "build:icons:mac": "bash scripts/gen-mac-icon.sh",
-    "dist": "npm run build:icons:mac && electron-builder"
+    "dist": "npm run build:icons:mac && electron-builder",
+    "test": "jest"
   },
   "build": {
     "appId": "com.example.my-electron-app",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "electron": "^31.0.0",
-    "electron-builder": "^26.7.0"
+    "electron-builder": "^26.7.0",
+    "jest": "^30.2.0"
   }
 }
