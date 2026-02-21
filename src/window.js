@@ -95,6 +95,21 @@ function createWindowForUrl(url, bounds) {
     }
   });
 
+  // after you create `w` (and before loadURL)
+  const ua0 = w.webContents.getUserAgent();
+
+  const uaSanitized = ua0
+    .replace(/\bdeskai-widget\/[\d.]+\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (uaSanitized !== ua0) {
+    w.webContents.setUserAgent(uaSanitized);
+    console.log("UA sanitized:", uaSanitized);
+  } else {
+    console.log("UA unchanged:", ua0);
+  }
+
   const allowed = providerOrigins();
   const primaryOrigin = new URL(url).origin;
 
@@ -113,18 +128,6 @@ function createWindowForUrl(url, bounds) {
     }
   });
 
-  const ua = siteSession.getUserAgent();
-
-  const cleanedUA = ua
-    .replace(/\bElectron\/[\d.]+\b/gi, "")
-    .replace(/\bdeskai-widget\/[\d.]+\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+\)/g, ")")
-    .replace(/\(\s+/g, "(")
-    .trim();
-
-  w.webContents.setUserAgent(cleanedUA);  
-
   // Keep links/popups in the same window
   w.webContents.setWindowOpenHandler(({ url }) => {
     w.loadURL(url);
@@ -138,8 +141,6 @@ function createWindowForUrl(url, bounds) {
 
   w.on("move", () => saveWindowState(w));
   w.on("close", () => saveWindowState(w));
-
-  console.log("UA in use:", w.webContents.getUserAgent());  
 
   return w;
 }

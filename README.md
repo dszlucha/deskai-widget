@@ -96,9 +96,6 @@ You can also access analysis tools from the **Edit** menu.
 deskai-widget/
 ├── assets/
 │   └── icons/                   # Source icon files
-├── build/
-│   └── icons/
-│       └── macos.iconset/       # macOS icon assets for app packaging
 ├── scripts/
 │   └── gen-mac-icon.sh          # Icon generation script
 ├── src/
