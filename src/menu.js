@@ -1,23 +1,39 @@
+// menu.js
 const { Menu, app } = require("electron");
 const { getHomeUrl, setHomeUrl } = require("./state");
-const { getWindow, updateAlwaysOnTopState, setAlwaysOnTopMenuItem } = require("./window");
+const {
+  getWindow,
+  switchToUrl,
+  updateAlwaysOnTopState,
+  setAlwaysOnTopMenuItem
+} = require("./window");
 const { getPasteMenuItems } = require("./paste-templates");
+const { PROVIDERS } = require("./providers");
 
 const DEFAULT_SERVICE_URL = "https://duck.ai";
 
-function setService(url) {
-  const win = getWindow();
-  setHomeUrl(url, DEFAULT_SERVICE_URL);
-  if (win) {
-    win.loadURL(getHomeUrl());
+// Normalize URL for comparison (ignore trailing slashes, query params, etc.)
+function norm(u) {
+  try {
+    return new URL(u).origin;
+  } catch {
+    return u;
   }
-  // you can still call saveWindowState(win) here if you want
+}
+
+function setService(url) {
+  setHomeUrl(url, DEFAULT_SERVICE_URL);
+
+  // Recreate window into per-site partition instead of reusing the same session
+  switchToUrl(getHomeUrl());
+
   createMenu(); // refresh radio check
 }
 
 function createMenu() {
   const win = getWindow();
-  const homeUrl = getHomeUrl();
+  const homeUrl = norm(getHomeUrl());
+  console.log("getHomeUrl() =", getHomeUrl());
 
   const template = [
     ...(process.platform === "darwin"
@@ -53,46 +69,29 @@ function createMenu() {
       ]
     },
     {
-      label: "AI Provider",
+      label: "View",
       submenu: [
         {
-          label: "Duck.ai",
-          type: "radio",
-          checked: homeUrl === "https://duck.ai",
-          click: () => setService("https://duck.ai")
+          label: "Toggle Developer Tools",
+          accelerator: process.platform === "darwin" ? "Alt+Command+I" : "Ctrl+Shift+I",
+          click: () => {
+            const w = getWindow();
+            if (w) w.webContents.toggleDevTools();
+          }
         },
-        {
-          label: "ChatGPT",
-          type: "radio",
-          checked: homeUrl === "https://chatgpt.com",
-          click: () => setService("https://chatgpt.com")
-        },        
-        {
-          label: "Google Gemini",
-          type: "radio",
-          checked: homeUrl === "https://gemini.google.com",
-          click: () => setService("https://gemini.google.com")
-        },
-        {
-          label: "Microsoft Copilot",
-          type: "radio",
-          checked: homeUrl === "https://copilot.microsoft.com",
-          click: () => setService("https://copilot.microsoft.com")
-        },           
-        {
-          label: "Claude AI",
-          type: "radio",
-          checked: homeUrl === "https://claude.ai",
-          click: () => setService("https://claude.ai")
-        },  
-        {
-          label: "Perplexity",
-          type: "radio",
-          checked: homeUrl === "https://www.perplexity.ai",
-          click: () => setService("https://www.perplexity.ai")
-        },          
+        { role: "reload" },
+        { role: "forceReload" }
       ]
     },
+    {
+      label: "AI Provider",
+      submenu: PROVIDERS.map(p => ({
+        label: p.label,
+        type: "radio",
+        checked: new URL(getHomeUrl()).origin === new URL(p.url).origin,
+        click: () => setService(p.url)
+      }))
+    },      
     {
       label: "Window",
       role: "windowMenu",
@@ -118,8 +117,7 @@ function createMenu() {
           label: "Home",
           accelerator: "CmdOrCtrl+Shift+H",
           click: () => {
-            const w = getWindow();
-            if (w) w.loadURL(getHomeUrl());
+            switchToUrl(getHomeUrl());
           }
         },
         { type: "separator" },

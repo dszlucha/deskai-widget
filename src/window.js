@@ -1,6 +1,8 @@
+// window.js
 const { BrowserWindow, Menu, shell, clipboard, session } = require("electron");
 const { loadWindowState, saveWindowState, getHomeUrl } = require("./state");
 const { getPasteMenuItems } = require("./paste-templates");
+const { providerOrigins } = require("./providers");
 
 let win;
 let alwaysOnTopMenuItem;
@@ -9,40 +11,17 @@ function updateAlwaysOnTopState(on) {
   if (!win) return;
   win.setAlwaysOnTop(on);
   win.setTitle(`deskai-widget ${on ? "(Always on Top)" : ""}`);
-  if (alwaysOnTopMenuItem) {
-    alwaysOnTopMenuItem.checked = on;
-  }
+  if (alwaysOnTopMenuItem) alwaysOnTopMenuItem.checked = on;
 }
 
-function createWindow() {
-  const state = loadWindowState();
+function partitionForUrl(url) {
+  const origin = new URL(url).origin;
+  const safe = origin.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+  return `persist:deskai_${safe}`;
+}
 
-  const defaultUA = session.defaultSession.getUserAgent();
-  const cleanedUA = defaultUA
-    .replace(/Electron\/[\d.]+\s*/i, "")
-    .replace(/deskai-widget\/[\d.]+\s*/i, "");
-  const customUA = `${cleanedUA.trim()} deskai`;
-
-  win = new BrowserWindow({
-    width: 480,
-    height: 720,
-    x: state.x,
-    y: state.y,
-    alwaysOnTop: true,
-    resizable: true,
-    title: "deskai-widget (Always on Top)",
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      spellcheck: true
-    }
-  });
-
-  win.webContents.setUserAgent(customUA);
-  win.loadURL(getHomeUrl());
-
-  win.webContents.on("context-menu", (event, params) => {
+function attachContextMenuHandlers(targetWin) {
+  targetWin.webContents.on("context-menu", (event, params) => {
     const template = [];
 
     if (params.isEditable) {
@@ -54,15 +33,12 @@ function createWindow() {
             template.push({
               label: suggestion,
               click: () => {
-                win.webContents.replaceMisspelling(suggestion);
+                targetWin.webContents.replaceMisspelling(suggestion);
               }
             });
           });
         } else {
-          template.push({
-            label: "No Spelling Suggestions",
-            enabled: false
-          });
+          template.push({ label: "No Spelling Suggestions", enabled: false });
         }
 
         template.push({ type: "separator" });
@@ -79,31 +55,129 @@ function createWindow() {
       template.push(
         {
           label: "Open Link in Browser",
-          click: () => {
-            shell.openExternal(params.linkURL);
-          }
+          click: () => shell.openExternal(params.linkURL)
         },
         {
           label: "Copy Link Address",
-          click: () => {
-            clipboard.writeText(params.linkURL);
-          }
+          click: () => clipboard.writeText(params.linkURL)
         }
       );
     } else {
-      template.push(
-        { role: "copy", enabled: params.editFlags.canCopy }
-      );
+      template.push({ role: "copy", enabled: params.editFlags.canCopy });
     }
 
-    const contextMenu = Menu.buildFromTemplate(template);
-    contextMenu.popup({ window: win });
+    Menu.buildFromTemplate(template).popup({ window: targetWin });
+  });
+}
+
+function createWindowForUrl(url, bounds) {
+  const partition = partitionForUrl(url);
+  const siteSession = session.fromPartition(partition);
+  console.log(`Creating window for ${url} with partition ${partition}`);
+
+  const state = loadWindowState();
+
+  const w = new BrowserWindow({
+    show: false, // create hidden to avoid flicker during URL switch
+    width: bounds?.width ?? 480,
+    height: bounds?.height ?? 720,    
+    x: bounds?.x ?? state.x,
+    y: bounds?.y ?? state.y,
+    alwaysOnTop: true,
+    resizable: true,
+    title: "deskai-widget (Always on Top)",
+    webPreferences: {
+      partition,
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      spellcheck: true
+    }
   });
 
-  win.on("move", () => saveWindowState(win));
-  win.on("close", () => saveWindowState(win));
+  const allowed = providerOrigins();
+  const primaryOrigin = new URL(url).origin;
 
+  function logCleanup({ partition, origin, reason }) {
+    console.log(`[cleanup] partition=${partition} origin=${origin} reason=${reason}`);
+  }
+
+  w.webContents.on("did-navigate", async (_, toUrl) => {
+    const origin = new URL(toUrl).origin;
+    if (allowed.has(origin)) return; // keep provider storage
+    logCleanup({ partition, origin, reason: "navigated-to-non-provider" });
+    try {
+      await siteSession.clearStorageData({ origin });
+    } catch (e) {
+      console.warn(`[cleanup] failed partition=${partition} origin=${origin}`, e);
+    }
+  });
+
+  const ua = siteSession.getUserAgent();
+
+  const cleanedUA = ua
+    .replace(/\bElectron\/[\d.]+\b/gi, "")
+    .replace(/\bdeskai-widget\/[\d.]+\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+\)/g, ")")
+    .replace(/\(\s+/g, "(")
+    .trim();
+
+  w.webContents.setUserAgent(cleanedUA);  
+
+  // Keep links/popups in the same window
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    w.loadURL(url);
+    return { action: "deny" };
+  });
+
+  attachContextMenuHandlers(w);
+
+  w.loadURL(url);
+  w.once("ready-to-show", () => w.show());
+
+  w.on("move", () => saveWindowState(w));
+  w.on("close", () => saveWindowState(w));
+
+  console.log("UA in use:", w.webContents.getUserAgent());  
+
+  return w;
+}
+
+function createWindow() {
+  // initial boot uses whatever getHomeUrl() currently returns
+  win = createWindowForUrl(getHomeUrl());
   return win;
+}
+
+function switchToUrl(url) {
+  const old = win;
+  const bounds = old && !old.isDestroyed() ? old.getBounds() : undefined;
+
+  // Create new first so we never hit "0 windows" in-between
+  const next = createWindowForUrl(url, bounds);
+
+  // Optional: preserve always-on-top checkbox state
+  const desiredAOT = alwaysOnTopMenuItem ? alwaysOnTopMenuItem.checked : true;
+
+  // Once the new window is ready, destroy the old one
+  next.once("ready-to-show", () => {
+    win = next;
+    updateAlwaysOnTopState(desiredAOT);
+
+    if (old && !old.isDestroyed()) old.destroy();
+  });
+
+  // Fallback: if ready-to-show doesn't fire (some pages), swap on first paint
+  next.webContents.once("did-finish-load", () => {
+    if (win !== next) {
+      win = next;
+      updateAlwaysOnTopState(desiredAOT);
+      if (old && !old.isDestroyed()) old.destroy();
+    }
+  });
+
+  return next;
 }
 
 function getWindow() {
@@ -114,4 +188,10 @@ function setAlwaysOnTopMenuItem(item) {
   alwaysOnTopMenuItem = item;
 }
 
-module.exports = { createWindow, getWindow, updateAlwaysOnTopState, setAlwaysOnTopMenuItem };
+module.exports = {
+  createWindow,
+  switchToUrl,
+  getWindow,
+  updateAlwaysOnTopState,
+  setAlwaysOnTopMenuItem
+};

@@ -1,9 +1,12 @@
+// main.js
 const { app, BrowserWindow } = require("electron");
 const { createWindow, updateAlwaysOnTopState } = require("./window");
 const { createMenu } = require("./menu");
 const { registerShortcuts, unregisterShortcuts } = require("./shortcuts");
+const { loadWindowState } = require("./state");
 
 app.whenReady().then(() => {
+  loadWindowState();
   createWindow();
   createMenu();
   updateAlwaysOnTopState(true);

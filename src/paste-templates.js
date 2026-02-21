@@ -1,3 +1,4 @@
+// paste-templates.js
 const { clipboard } = require("electron");
 
 function pasteWithPrefix(win, prefix) {

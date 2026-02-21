@@ -1,3 +1,4 @@
+// shortcuts.js
 const { globalShortcut } = require("electron");
 const { getWindow, updateAlwaysOnTopState } = require("./window");
 

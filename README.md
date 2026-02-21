@@ -7,6 +7,8 @@ An Electron desktop application that brings an AI web interface to your desktop 
 - **Always-on-Top Widget**: Keep deskai-widget accessible above other windows while you work
 - **Keyboard Shortcuts**: Trigger AI analysis directly with Cmd+Shift+[letter] shortcuts
 - **Clipboard Integration**: Copy code to clipboard, use a shortcut to prepend context, and paste results
+- **Multiple AI Providers**: Switch between Duck.ai, ChatGPT, Google Gemini, Microsoft Copilot, Claude AI, and Perplexity
+- **Isolated Storage**: Each AI provider has its own isolated session and storage
 - **Smart Link Handling**: Left-click links to navigate within the app, right-click to open in browser or copy
 - **Navigation**: Use Cmd+Left to go back and Cmd+Shift+H to return home
 - **Persistent Window Position**: Your window position is saved and restored between sessions
@@ -16,7 +18,18 @@ An Electron desktop application that brings an AI web interface to your desktop 
 ## Disclaimer
 
 This project is not affiliated with or endorsed by DuckDuckGo, Google, OpenAI, Anthropic, Microsoft, or any other provider. It simply opens their public web interfaces in an Electron window via an “AI Provider” menu.
+## AI Providers
 
+deskai-widget supports multiple AI providers, each with isolated storage and sessions:
+
+- **Duck.ai**: Privacy-focused AI assistant
+- **ChatGPT**: OpenAI's conversational AI
+- **Google Gemini**: Google's multimodal AI
+- **Microsoft Copilot**: AI-powered productivity assistant
+- **Claude AI**: Anthropic's helpful AI
+- **Perplexity**: AI-powered search and answers
+
+Switch providers using the **AI Provider** menu. Each provider maintains its own login state and preferences.
 ## Quick Start
 
 ### Prerequisites
@@ -81,8 +94,6 @@ You can also access analysis tools from the **Edit** menu.
 
 ```
 deskai-widget/
-├── .github/
-│   └── copilot-instructions.md  # Copilot context guidelines
 ├── assets/
 │   └── icons/                   # Source icon files
 ├── build/
@@ -90,8 +101,14 @@ deskai-widget/
 │       └── macos.iconset/       # macOS icon assets for app packaging
 ├── scripts/
 │   └── gen-mac-icon.sh          # Icon generation script
-├── dist/                        # Build output (created by npm run dist)
-├── main.js                      # Electron application entry point (~383 lines)
+├── src/
+│   ├── main.js                  # Electron application entry point
+│   ├── menu.js                  # Application menu configuration
+│   ├── paste-templates.js       # Paste analysis templates
+│   ├── providers.js             # AI provider definitions
+│   ├── shortcuts.js             # Keyboard shortcuts registration
+│   ├── state.js                 # Application state management
+│   └── window.js                # Window creation and management
 ├── package.json                 # Dependencies and build configuration
 ├── package-lock.json            # Dependency lock file
 ├── LICENSE                      # MIT License
@@ -100,7 +117,9 @@ deskai-widget/
 
 ### Architecture
 
-- **Single-file Monolith**: All Electron logic lives in `main.js` for simplicity
+- **Modular Design**: Electron logic is split into multiple modules in the `src/` directory for better maintainability
+- **Multi-Provider Support**: Switch between AI providers with isolated sessions and storage per provider
+- **Per-Site Partitions**: Each provider uses a separate Electron session partition for complete isolation
 - **Web-based UI**: Loads selected AI provider in a BrowserWindow; UI changes happen upstream
 - **Smart Navigation**: Links open in-app by default; external options via right-click context menu
 - **Clipboard Integration**: Avoids IPC by using clipboard + native paste
@@ -110,20 +129,17 @@ deskai-widget/
 
 #### Add a new AI provider
 
-Edit the AI Provider menu:
+Add the provider to the `PROVIDERS` array in `src/providers.js`:
 
 ```javascript
-{
-  label: "Provider",
-  type: "radio",
-  checked: homeUrl === "https://provider_url",
-  click: () => setService("https://provider_url")
-},
+{ label: "New Provider", url: "https://new-provider.com" }
 ```
+
+The menu will automatically include the new provider as a radio option.
 
 #### Add a New Analysis Shortcut
 
-Edit the `getPasteMenuItems()` function in `main.js`:
+Edit the `getPasteMenuItems()` function in `src/paste-templates.js`:
 
 ```javascript
 {
@@ -138,11 +154,11 @@ Edit the `getPasteMenuItems()` function in `main.js`:
 
 #### Modify Window Behavior
 
-Update `createWindow()` in `main.js` to change size, resizable flag, web preferences, or startup position.
+Update `createWindow()` in `src/window.js` to change size, resizable flag, web preferences, or startup position.
 
 #### Update the Context Menu
 
-Modify the `context-menu` event listener in `createWindow()` to add or remove right-click options.
+Modify the `context-menu` event listener in `src/window.js` to add or remove right-click options.
 
 ### Building for Distribution
 
@@ -156,14 +172,20 @@ This uses `electron-builder` to create a macOS `.app` bundle configured in `pack
 
 When making changes:
 
-- Keep related functionality co-located in `main.js`
+- Keep related functionality co-located in appropriate modules in `src/`
 - Follow the naming convention: `get*`, `load*`, `save*`, `update*`, `create*`, `register*`
 - Test that window position persists across restarts
 - Verify all keyboard shortcuts work without system conflicts
 
 ## Testing
 
-No automated tests are currently configured. Manual testing checklist:
+Basic unit tests are available for state management. Run tests with:
+
+```bash
+npm test
+```
+
+Manual testing checklist:
 
 - ✓ Window position persists across application restart
 - ✓ All Cmd+Shift+[letter] shortcuts trigger the correct analysis
@@ -172,6 +194,8 @@ No automated tests are currently configured. Manual testing checklist:
 - ✓ Right-click links allow opening in external browser or copying
 - ✓ Back (Cmd+Left) and Home (Cmd+Shift+H) navigation work correctly
 - ✓ Spell-check suggestions appear in right-click context menu
+- ✓ AI Provider menu allows switching between providers
+- ✓ Each provider maintains isolated storage and sessions
 
 ## License
 
